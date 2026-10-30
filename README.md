@@ -11,7 +11,9 @@ Quand un ticket arrive sans le poste, sans le message d'erreur ou sans dire depu
 3. S'il manque quelque chose d'utile pour ce type de demande, le plugin dépose un suivi privé de trois lignes : ce qui manque, puis la question prête à envoyer. Signé par un utilisateur technique « relance-robot ».
 4. En bas du ticket, un technicien voit « Envoyer la relance au demandeur » et « Ignorer ». Envoyer ajoute la question en suivi public, signée par lui, et passe le ticket en attente. Le demandeur ne voit jamais le bouton.
 
-Mesuré sur 50 tickets avec Claude Haiku : 49 décisions justes, 1 relance injustifiée, 0 manquée, environ 320 jetons par ticket. Détail dans [docs/evaluation.md](docs/evaluation.md).
+Mesuré sur 50 tickets que j'ai rédigés moi-même, avec Claude Haiku : 49 décisions justes, 1 relance injustifiée, 0 manquée, environ 320 jetons par ticket. C'est un auto-test, pas une preuve ; les vrais tickets sont plus sales. Détail dans [docs/evaluation.md](docs/evaluation.md), et l'issue n°2 demande les vôtres.
+
+Le plugin tourne sur mon instance de développement. Il n'est encore installé chez aucun client.
 
 ## Où vont les données
 
@@ -23,13 +25,13 @@ Le masquage par motifs rate des choses. Pour un ticket qui contient un secret, e
 
 La question rédigée par le modèle est conservée dans GLPI (table du plugin) le temps que le technicien clique : c'est ce qui alimente le bouton. Le journal du plugin ne garde que des métadonnées (ticket, fournisseur, modèle, jetons, durée, code HTTP, nombre de masquages), purgées à 90 jours.
 
-La clé API est chiffrée avec le mécanisme natif de GLPI (`GLPIKey`) et n'est jamais affichée. L'utilisateur technique a un profil dédié « Relance (robot) » : lecture des tickets, ajout et lecture de suivis, rien d'autre, et aucune source d'authentification donc aucune connexion possible.
+La clé API est chiffrée avec le mécanisme natif de GLPI (`GLPIKey`) et n'est jamais affichée. L'utilisateur technique a un profil dédié « Relance (robot) » : lecture des tickets, ajout et lecture de suivis, rien d'autre, aucune source d'authentification et une date de fin de validité dans le passé : connexion refusée, même via un annuaire ou un SSO.
 
 Fiche de traitement et modèle d'EFVP (loi 25) pré-remplis : [docs/fiche-de-traitement.md](docs/fiche-de-traitement.md), [docs/efvp-modele.md](docs/efvp-modele.md).
 
 ## Installation
 
-Testé sur GLPI 11.0.12, PHP 8.2 à 8.5, MariaDB 11. Nécessite l'extension curl. Guide complet : [docs/installation.md](docs/installation.md).
+Testé sur GLPI 11.0.12 avec PHP 8.5 et MariaDB 11 ; PHP 8.2 est le minimum déclaré, pas encore testé. Nécessite l'extension curl. Guide complet : [docs/installation.md](docs/installation.md).
 
 1. Déposer le dossier `relance` dans `plugins/` de votre GLPI (zip dans les [versions](https://github.com/AymerickVic/glpi-relance/releases)).
 2. Configuration > Plugins : installer, activer.

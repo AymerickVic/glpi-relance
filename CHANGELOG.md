@@ -12,4 +12,7 @@ Première version, pour des testeurs.
 - Configuration par entité avec héritage.
 - Page de diagnostic ; journal de métadonnées purgé à 90 jours.
 - Clé de licence facultative : sans clé, aucun appel vers un serveur tiers.
-- Mesure sur 50 tickets : 49 décisions justes, 1 relance injustifiée, 0 manquée (`docs/evaluation.md`).
+- Mesure sur 50 tickets rédigés par l'auteur : 49 décisions justes, 1 relance injustifiée, 0 manquée (`docs/evaluation.md`).
+- Échecs : trois essais, un seul si la clé est refusée ; lignes bloquées reprises après 10 minutes ; échecs affichés dans Diagnostic avec le message, et bandeau dans la configuration pendant 24 heures.
+- Robot : date de fin de validité dans le passé, connexion refusée quelle que soit la source.
+- Purge : les questions proposées sont supprimées 30 jours après envoi ou refus.

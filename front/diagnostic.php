@@ -58,6 +58,15 @@ echo '</table>';
 echo "<a class='btn btn-outline-primary' href='?test=1'>Tester la connexion au modèle</a> ";
 echo "<a class='btn btn-outline-secondary' href='config.php'>Retour à la configuration</a>";
 
+$enEchec = $DB->request(['FROM' => 'glpi_plugin_relance_queue', 'WHERE' => ['status' => 'failed'], 'ORDER' => 'date_mod DESC', 'LIMIT' => 5]);
+if (count($enEchec)) {
+    echo "<h4 class='mt-4'>Derniers échecs</h4><table class='table table-sm'><tr><th>Date</th><th>Ticket</th><th>Essais</th><th>Dernière erreur</th></tr>";
+    foreach ($enEchec as $q) {
+        echo "<tr><td>{$q['date_mod']}</td><td>{$q['tickets_id']}</td><td>{$q['attempts']}</td><td>" . htmlescape((string) $q['last_error']) . '</td></tr>';
+    }
+    echo '</table>';
+}
+
 $derniers = $DB->request(['FROM' => 'glpi_plugin_relance_logs', 'ORDER' => 'id DESC', 'LIMIT' => 10]);
 echo "<h4 class='mt-4'>Dix derniers traitements</h4><table class='table table-sm'><tr><th>Date</th><th>Ticket</th><th>Résultat</th><th>Fournisseur</th><th>Jetons</th><th>Durée</th><th>Masquages</th></tr>";
 foreach ($derniers as $l) {

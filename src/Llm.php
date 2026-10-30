@@ -70,8 +70,11 @@ class Llm
         [$raw, $code, $err] = self::post($url, $headers, $body, 20);
         $ms = (int) ((microtime(true) - $t0) * 1000);
 
-        if ($raw === '' && $err !== '') {
-            throw new \RuntimeException("Connexion impossible ($provider) : " . self::sansSecret($err));
+        if ($raw === '') {
+            if ($code > 0) {
+                throw new \RuntimeException("Réponse $code de $provider, sans corps");
+            }
+            throw new \RuntimeException("Connexion impossible ($provider) : " . self::sansSecret($err ?: 'réponse vide'));
         }
         $data = json_decode($raw, true);
         if ($code < 200 || $code >= 300 || !is_array($data)) {

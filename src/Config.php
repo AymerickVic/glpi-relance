@@ -26,6 +26,11 @@ class Config extends CommonDBTM
 
     public const TECH_USER_LOGIN = 'relance-robot';
     public const ROBOT_PROFILE   = 'Relance (robot)';
+    public const ROBOT_END_DATE  = '2000-01-01 00:00:00';
+    public const ROBOT_RIGHTS    = [
+        'ticket'   => READ | Ticket::READALL,
+        'followup' => READ | ITILFollowup::SEEPUBLIC | ITILFollowup::SEEPRIVATE | ITILFollowup::ADDALLITEM,
+    ];
 
     public static function getTable($classname = null)
     {
@@ -146,6 +151,9 @@ class Config extends CommonDBTM
 
         if ($entities_id === 0) {
             echo Licence::bandeau();
+            if (($n = Queue::echecsRecents()) > 0) {
+                echo "<div class='alert alert-danger'>$n ticket(s) en échec définitif ces dernières 24 heures. Le fournisseur ne répond pas ou refuse la clé : voir la page Diagnostic.</div>";
+            }
         }
 
         echo "<form method='post' action='" . self::getFormURL() . "'>";
@@ -209,6 +217,8 @@ class Config extends CommonDBTM
     {
         $profile = new Profile();
         foreach ($profile->find(['name' => self::ROBOT_PROFILE]) as $p) {
+            // Profil homonyme déjà présent : on réimpose ses droits, on ne fait pas confiance à ce qu'on trouve.
+            ProfileRight::updateProfileRights((int) $p['id'], self::ROBOT_RIGHTS);
             return (int) $p['id'];
         }
         $id = (int) $profile->add([
@@ -217,10 +227,7 @@ class Config extends CommonDBTM
             'comment'   => 'Créé par le plugin Relance. Lecture des tickets et ajout de suivis seulement.',
         ]);
         if ($id > 0) {
-            ProfileRight::updateProfileRights($id, [
-                'ticket'   => READ | Ticket::READALL,
-                'followup' => READ | ITILFollowup::SEEPUBLIC | ITILFollowup::SEEPRIVATE | ITILFollowup::ADDALLITEM,
-            ]);
+            ProfileRight::updateProfileRights($id, self::ROBOT_RIGHTS);
         }
         return $id;
     }
@@ -235,9 +242,8 @@ class Config extends CommonDBTM
 
         $user = new User();
         if ($user->getFromDBbyName(self::TECH_USER_LOGIN)) {
-            if (!$user->fields['is_active']) {
-                $user->update(['id' => $user->getID(), 'is_active' => 1]);
-            }
+            // Toujours actif (auteur des suivis), toujours interdit de connexion.
+            $user->update(['id' => $user->getID(), 'is_active' => 1, 'authtype' => Auth::NOT_YET_AUTHENTIFIED, 'end_date' => self::ROBOT_END_DATE]);
             return $user->getID();
         }
 
@@ -246,6 +252,8 @@ class Config extends CommonDBTM
             'realname'      => 'Relance (robot)',
             'is_active'     => 1,
             'authtype'      => Auth::NOT_YET_AUTHENTIFIED,
+            // Date de fin dans le passé : GLPI refuse la connexion quelle que soit la source (LDAP, SSO…).
+            'end_date'      => self::ROBOT_END_DATE,
             '_profiles_id'  => $profiles_id,
             '_entities_id'  => 0,
             '_is_recursive' => 1,

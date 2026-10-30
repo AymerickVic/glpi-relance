@@ -1,6 +1,6 @@
 # Installer Relance
 
-Durée : dix minutes. Prérequis : GLPI 11, PHP 8.2 ou plus, l'extension curl, et une clé API OpenAI ou Anthropic, ou un Ollama joignable depuis le serveur GLPI. Testé sur GLPI 11.0.12, PHP 8.2 à 8.5, MariaDB 11.
+Durée : dix minutes. Prérequis : GLPI 11, PHP 8.2 ou plus, l'extension curl, et une clé API OpenAI ou Anthropic, ou un Ollama joignable depuis le serveur GLPI. Testé sur GLPI 11.0.12 avec PHP 8.5 et MariaDB 11 ; PHP 8.2 est le minimum déclaré, pas encore testé.
 
 ## 1. Déposer le plugin
 
@@ -15,7 +15,7 @@ php bin/console glpi:plugin:activate relance
 
 Ou dans l'interface : Configuration > Plugins > Relance > Installer, puis Activer.
 
-L'installation crée quatre tables préfixées `glpi_plugin_relance_`, un profil « Relance (robot) » (lecture des tickets, ajout et lecture de suivis, rien d'autre), un utilisateur technique « relance-robot » avec ce profil sur l'entité racine, récursif, sans source d'authentification donc sans connexion possible, et trois actions automatiques.
+L'installation crée quatre tables préfixées `glpi_plugin_relance_`, un profil « Relance (robot) » (lecture des tickets, ajout et lecture de suivis, rien d'autre), un utilisateur technique « relance-robot » avec ce profil sur l'entité racine, récursif, sans source d'authentification et avec une date de fin dans le passé (connexion refusée, même via LDAP ou SSO), et trois actions automatiques.
 
 ## 2. Configurer
 
@@ -33,7 +33,7 @@ Cliquez « Diagnostic » : la page vérifie la version, l'utilisateur technique,
 
 La tâche `processqueue` (Configuration > Actions automatiques) vide la file chaque minute. GLPI la lance en mode CLI si votre cron système appelle `front/cron.php` chaque minute, comme la documentation GLPI le recommande ; sinon elle tourne lors de la navigation des utilisateurs, et le suivi tombe à la première page ouverte par un technicien. Un passage traite au plus 20 tickets et s'arrête après 40 secondes pour reprendre au suivant.
 
-Si le fournisseur ne répond pas, le ticket est réessayé trois fois puis marqué en échec dans la page Diagnostic. Le ticket lui-même n'est jamais modifié.
+Si le fournisseur ne répond pas, le ticket est réessayé trois fois (une seule si la clé est refusée) puis marqué en échec : visible dans la page Diagnostic avec le message d'erreur, et signalé par un bandeau rouge dans la configuration pendant 24 heures. Le ticket lui-même n'est jamais modifié.
 
 ## 4. Par entité
 

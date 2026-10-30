@@ -49,6 +49,7 @@ function plugin_relance_install(): bool
             `attempts` int NOT NULL DEFAULT 0,
             `last_error` text DEFAULT NULL,
             `date_creation` timestamp NULL DEFAULT NULL,
+            `date_mod` timestamp NULL DEFAULT NULL,
             `date_done` timestamp NULL DEFAULT NULL,
             PRIMARY KEY (`id`),
             KEY `status` (`status`),
@@ -92,6 +93,12 @@ function plugin_relance_install(): bool
             KEY `tickets_id` (`tickets_id`),
             KEY `date_creation` (`date_creation`)
         ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} ROW_FORMAT=DYNAMIC;");
+    }
+
+    // 0.1.0 → : date du dernier changement d'état dans la file (détection des lignes bloquées)
+    if (!$DB->fieldExists('glpi_plugin_relance_queue', 'date_mod')) {
+        $migration->addField('glpi_plugin_relance_queue', 'date_mod', 'timestamp', ['null' => true]);
+        $migration->migrationOneTable('glpi_plugin_relance_queue');
     }
 
     // 0.1.0 → : clé de licence (entité racine seulement)
