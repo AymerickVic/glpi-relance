@@ -1,20 +1,23 @@
 <?php
 
 /**
- * GLPI Assist — licence : une clé, une vérification par jour, jamais de contenu de ticket.
- * Sans clé valide, le plugin fonctionne ; il n'a simplement plus droit aux mises à jour ni au support.
+ * Relance — licence : une clé, une vérification par jour, jamais de contenu de ticket.
+ * Sans clé, le plugin fonctionne et ne contacte aucun serveur. Avec une clé, il envoie la clé,
+ * la version du plugin, celle de GLPI et un condensé de l'identifiant d'instance.
+ * Le code est public : les versions sont sur GitHub. La licence paie le support et le signalement.
  * Licence GPLv3+, voir LICENSE.
  */
 
-namespace GlpiPlugin\Glpiassist;
+namespace GlpiPlugin\Relance;
 
 use Config as GlpiConfig;
 use CronTask;
 
 class Licence
 {
-    public const SERVEUR = 'https://srv2106298.hstgr.cloud';
-    public const CONTEXTE = 'plugin:Glpiassist';
+    public const SERVEUR  = 'https://srv2106298.hstgr.cloud';
+    public const VERSIONS = 'https://github.com/AymerickVic/glpi-relance/releases';
+    public const CONTEXTE = 'plugin:Relance';
 
     /** État mémorisé : statut, expire, message, derniere_version, verifie_le. */
     public static function etat(): array
@@ -33,48 +36,39 @@ class Licence
     public static function instance(): string
     {
         $uuid = (string) (GlpiConfig::getConfigurationValue('core', 'instance_uuid') ?? '');
-        return substr(hash('sha256', 'glpiassist|' . $uuid), 0, 32);
+        return substr(hash('sha256', 'relance|' . $uuid), 0, 32);
     }
 
-    /** Ce qui est envoyé au serveur : clé, version du plugin, version GLPI, identifiant d'instance. Rien d'autre. */
     public static function verifier(): array
     {
         $row = Config::rowFor(0);
         $cle = trim((string) ($row['licence_key'] ?? ''));
-        $etat = ['statut' => 'aucune', 'expire' => '', 'message' => 'Aucune clé de licence saisie.', 'derniere_version' => ''];
 
-        if ($cle !== '') {
-            $ch = curl_init(self::SERVEUR . '/api/licence/verifier');
-            curl_setopt_array($ch, [
-                CURLOPT_POST           => true,
-                CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-                CURLOPT_POSTFIELDS     => json_encode(['cle' => $cle, 'version' => PLUGIN_GLPIASSIST_VERSION, 'glpi' => GLPI_VERSION, 'instance' => self::instance()]),
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_CONNECTTIMEOUT => 8,
-                CURLOPT_TIMEOUT        => 15,
-            ]);
-            $raw = curl_exec($ch);
-            $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-            curl_close($ch);
-            $d = is_string($raw) ? json_decode($raw, true) : null;
+        if ($cle === '') {
+            // Sans clé : aucun appel sortant, on efface l'état.
+            GlpiConfig::deleteConfigurationValues(self::CONTEXTE, ['licence_statut', 'licence_expire', 'licence_message', 'derniere_version', 'licence_verifie_le']);
+            return ['statut' => 'aucune', 'expire' => '', 'message' => 'Aucune clé de licence saisie.', 'derniere_version' => ''];
+        }
 
-            if ($code === 200 && is_array($d)) {
-                $etat = [
-                    'statut'           => !empty($d['valide']) ? 'valide' : 'invalide',
-                    'expire'           => (string) ($d['expire'] ?? ''),
-                    'message'          => (string) ($d['message'] ?? ''),
-                    'derniere_version' => (string) ($d['derniere_version'] ?? ''),
-                ];
-            } else {
-                // Serveur injoignable : on garde l'état précédent, on note seulement l'échec.
-                $prec = self::etat();
-                $etat = ['statut' => $prec['statut'], 'expire' => $prec['expire'], 'message' => 'Serveur de licences injoignable, dernier état conservé.', 'derniere_version' => $prec['derniere_version']];
-            }
+        [$raw, $code, $err] = Llm::post(self::SERVEUR . '/api/licence/verifier', ['Content-Type: application/json'], [
+            'cle'      => $cle,
+            'version'  => PLUGIN_RELANCE_VERSION,
+            'glpi'     => GLPI_VERSION,
+            'instance' => self::instance(),
+        ], 15);
+        $d = json_decode($raw, true);
+
+        if ($code === 200 && is_array($d)) {
+            $etat = [
+                'statut'           => !empty($d['valide']) ? 'valide' : 'invalide',
+                'expire'           => (string) ($d['expire'] ?? ''),
+                'message'          => (string) ($d['message'] ?? ''),
+                'derniere_version' => (string) ($d['derniere_version'] ?? ''),
+            ];
         } else {
-            // Même sans clé, on regarde s'il existe une version plus récente.
-            $raw = @file_get_contents(self::SERVEUR . '/api/licence/version', false, stream_context_create(['http' => ['timeout' => 8]]));
-            $d = is_string($raw) ? json_decode($raw, true) : null;
-            $etat['derniere_version'] = (string) ($d['derniere_version'] ?? '');
+            // Serveur injoignable : on garde l'état précédent, on note seulement l'échec.
+            $prec = self::etat();
+            $etat = ['statut' => $prec['statut'], 'expire' => $prec['expire'], 'message' => 'Serveur de licences injoignable, dernier état conservé.', 'derniere_version' => $prec['derniere_version']];
         }
 
         GlpiConfig::setConfigurationValues(self::CONTEXTE, [
@@ -90,12 +84,12 @@ class Licence
     public static function miseAJourDisponible(): bool
     {
         $v = self::etat()['derniere_version'];
-        return $v !== '' && version_compare($v, PLUGIN_GLPIASSIST_VERSION, '>');
+        return $v !== '' && version_compare($v, PLUGIN_RELANCE_VERSION, '>');
     }
 
     public static function cronInfo($name)
     {
-        return $name === 'verifierlicence' ? ['description' => 'GLPI Assist : vérifier la licence et les mises à jour'] : [];
+        return $name === 'verifierlicence' ? ['description' => 'Relance : vérifier la licence et signaler les mises à jour'] : [];
     }
 
     public static function cronVerifierlicence(?CronTask $task = null): int
@@ -110,12 +104,12 @@ class Licence
     {
         $e = self::etat();
         $maj = self::miseAJourDisponible()
-            ? " Une version plus récente existe (" . htmlspecialchars($e['derniere_version']) . ") : <a href='" . self::SERVEUR . "/api/licence/telecharger?cle=' target='_blank'>télécharger</a> avec votre clé."
+            ? ' Une version plus récente existe (' . htmlescape($e['derniere_version']) . ') : <a href="' . self::VERSIONS . '" target="_blank" rel="noopener">voir les versions</a>.'
             : '';
         return match ($e['statut']) {
-            'valide'   => "<div class='alert alert-success'>Licence valide" . ($e['expire'] ? " jusqu'au " . htmlspecialchars($e['expire']) : '') . ". Mises à jour et support inclus.$maj</div>",
-            'invalide' => "<div class='alert alert-danger'>" . htmlspecialchars($e['message']) . " Le plugin continue de fonctionner, sans mises à jour ni support.</div>",
-            default    => "<div class='alert alert-secondary'>Sans clé de licence : le plugin fonctionne, mais sans mises à jour ni support. " . ($maj ?: '') . '</div>',
+            'valide'   => "<div class='alert alert-success'>Licence valide" . ($e['expire'] ? " jusqu'au " . htmlescape($e['expire']) : '') . ". Support et signalement des mises à jour inclus.$maj</div>",
+            'invalide' => "<div class='alert alert-danger'>" . htmlescape($e['message']) . ' Le plugin continue de fonctionner, sans support.</div>',
+            default    => "<div class='alert alert-secondary'>Sans clé de licence : le plugin fonctionne, ne contacte aucun serveur, et n'a pas droit au support. Les versions sont sur <a href='" . self::VERSIONS . "' target='_blank' rel='noopener'>GitHub</a>.</div>",
         };
     }
 }

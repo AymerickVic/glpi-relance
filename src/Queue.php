@@ -1,12 +1,12 @@
 <?php
 
 /**
- * GLPI Assist — file d'attente et tâche planifiée.
+ * Relance — file d'attente et tâche planifiée.
  * Le hook de création ne fait qu'empiler. La tâche appelle le modèle et écrit le suivi privé.
  * Licence GPLv3+, voir LICENSE.
  */
 
-namespace GlpiPlugin\Glpiassist;
+namespace GlpiPlugin\Relance;
 
 use CommonDBTM;
 use CronTask;
@@ -15,14 +15,17 @@ use Ticket;
 
 class Queue extends CommonDBTM
 {
+    /** Au-delà, un passage de la tâche s'arrête et reprend au suivant (mode interne = requête web). */
+    private const BUDGET_SECONDES = 40;
+
     public static function getTable($classname = null)
     {
-        return 'glpi_plugin_glpiassist_queue';
+        return 'glpi_plugin_relance_queue';
     }
 
     public static function getTypeName($nb = 0)
     {
-        return 'GLPI Assist';
+        return 'Relance';
     }
 
     /** Hook item_add sur Ticket : empiler, c'est tout. Aucun appel réseau ici. */
@@ -37,6 +40,13 @@ class Queue extends CommonDBTM
         if (in_array((int) $ticket->fields['itilcategories_id'], $config['excluded_categories'], true)) {
             return;
         }
+        // Un ticket daté d'il y a plus d'une heure est une reprise ou une migration, pas une demande à relancer.
+        if (!empty($ticket->fields['date']) && strtotime($ticket->fields['date']) < time() - 3600) {
+            return;
+        }
+        if (countElementsInTable(self::getTable(), ['tickets_id' => $ticket->getID()]) > 0) {
+            return;
+        }
 
         $DB->insert(self::getTable(), [
             'tickets_id'    => $ticket->getID(),
@@ -49,8 +59,8 @@ class Queue extends CommonDBTM
     public static function cronInfo($name)
     {
         return match ($name) {
-            'processqueue' => ['description' => 'GLPI Assist : traiter les tickets en attente', 'parameter' => 'Tickets par passage'],
-            'purgelogs'    => ['description' => 'GLPI Assist : purger le journal', 'parameter' => 'Jours conservés'],
+            'processqueue' => ['description' => 'Relance : traiter les tickets en attente', 'parameter' => 'Tickets par passage'],
+            'purgelogs'    => ['description' => 'Relance : purger le journal', 'parameter' => 'Jours conservés'],
             default        => [],
         };
     }
@@ -60,7 +70,14 @@ class Queue extends CommonDBTM
         global $DB;
 
         $limite = max(1, (int) ($task?->fields['param'] ?? 20));
+        $debut = microtime(true);
         $fait = 0;
+
+        // Lignes restées en « working » (processus tué) : on les remet en attente après 10 minutes.
+        $DB->update(self::getTable(), ['status' => 'pending'], [
+            'status'        => 'working',
+            'date_creation' => ['<', date('Y-m-d H:i:s', time() - 600)],
+        ]);
 
         $it = $DB->request([
             'FROM'  => self::getTable(),
@@ -70,6 +87,10 @@ class Queue extends CommonDBTM
         ]);
 
         foreach ($it as $row) {
+            if (microtime(true) - $debut > self::BUDGET_SECONDES) {
+                $task?->log('Budget de temps atteint, reprise au prochain passage');
+                break;
+            }
             $DB->update(self::getTable(), ['status' => 'working', 'attempts' => (int) $row['attempts'] + 1], ['id' => $row['id']]);
             try {
                 $outcome = self::traiter((int) $row['tickets_id']);
@@ -78,8 +99,9 @@ class Queue extends CommonDBTM
                 $fait++;
             } catch (\Throwable $e) {
                 $retry = (int) $row['attempts'] + 1 < 3;
-                $DB->update(self::getTable(), ['status' => $retry ? 'pending' : 'failed', 'last_error' => mb_substr($e->getMessage(), 0, 1000)], ['id' => $row['id']]);
-                $task?->log("Ticket {$row['tickets_id']} : erreur, " . $e->getMessage());
+                $msg = Llm::sansSecret($e->getMessage());
+                $DB->update(self::getTable(), ['status' => $retry ? 'pending' : 'failed', 'last_error' => $msg], ['id' => $row['id']]);
+                $task?->log("Ticket {$row['tickets_id']} : erreur, $msg");
             }
         }
 
@@ -91,7 +113,7 @@ class Queue extends CommonDBTM
     {
         global $DB;
         $jours = max(1, (int) ($task?->fields['param'] ?? 90));
-        $DB->delete('glpi_plugin_glpiassist_logs', ['date_creation' => ['<', date('Y-m-d H:i:s', time() - $jours * DAY_TIMESTAMP)]]);
+        $DB->delete('glpi_plugin_relance_logs', ['date_creation' => ['<', date('Y-m-d H:i:s', time() - $jours * DAY_TIMESTAMP)]]);
         $DB->delete(self::getTable(), ['status' => ['done', 'failed'], 'date_creation' => ['<', date('Y-m-d H:i:s', time() - 7 * DAY_TIMESTAMP)]]);
         return 1;
     }
@@ -108,6 +130,10 @@ class Queue extends CommonDBTM
         if ((int) $ticket->fields['status'] >= Ticket::SOLVED) {
             return 'déjà résolu';
         }
+        // Jamais deux relances pour un même ticket, même après un réessai.
+        if (countElementsInTable('glpi_plugin_relance_relances', ['tickets_id' => $tickets_id]) > 0) {
+            return 'déjà traité';
+        }
 
         $config = Config::forEntity((int) $ticket->fields['entities_id']);
         if (!$config['is_active']) {
@@ -119,31 +145,34 @@ class Queue extends CommonDBTM
 
         $outcome = 'rien à demander';
         if ($r['manque']) {
-            $users_id = Config::technicalUserId();
+            // La relance est enregistrée AVANT le suivi : si le suivi échoue, on réessaie sans doublon possible.
+            $DB->insert('glpi_plugin_relance_relances', [
+                'tickets_id'    => $tickets_id,
+                'manque'        => implode(',', $r['manque']),
+                'question'      => $r['question'],
+                'status'        => 'proposed',
+                'date_creation' => date('Y-m-d H:i:s'),
+            ]);
+            $relances_id = (int) $DB->insertId();
+
             $fu = new ITILFollowup();
             $ok = $fu->add([
                 'itemtype'      => Ticket::class,
                 'items_id'      => $tickets_id,
-                'users_id'      => $users_id,
+                'users_id'      => Config::technicalUserId(),
                 'is_private'    => 1,
                 'content'       => Relance::suivi($r['manque'], $r['question']),
                 '_disablenotif' => true,
             ]);
-            $outcome = $ok ? 'relance proposée (' . implode(', ', $r['manque']) . ')' : 'échec écriture du suivi';
             if (!$ok) {
+                $DB->delete('glpi_plugin_relance_relances', ['id' => $relances_id]);
                 throw new \RuntimeException('ITILFollowup::add a échoué');
             }
-            $DB->insert('glpi_plugin_glpiassist_relances', [
-                'tickets_id'       => $tickets_id,
-                'manque'           => implode(',', $r['manque']),
-                'question'         => $r['question'],
-                'status'           => 'proposed',
-                'itilfollowups_id' => (int) $fu->getID(),
-                'date_creation'    => date('Y-m-d H:i:s'),
-            ]);
+            $DB->update('glpi_plugin_relance_relances', ['itilfollowups_id' => (int) $fu->getID()], ['id' => $relances_id]);
+            $outcome = 'relance proposée (' . implode(', ', $r['manque']) . ')';
         }
 
-        $DB->insert('glpi_plugin_glpiassist_logs', [
+        $DB->insert('glpi_plugin_relance_logs', [
             'tickets_id'    => $tickets_id,
             'fonction'      => 'relance',
             'provider'      => $config['provider'],

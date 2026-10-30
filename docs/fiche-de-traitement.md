@@ -1,8 +1,8 @@
-# Fiche de traitement — GLPI Assist (à compléter par le responsable du traitement)
+# Fiche de traitement — Relance (à compléter par le responsable du traitement)
 
 Ce document est un modèle pré-rempli pour votre registre des traitements (RGPD, art. 30) ou votre documentation loi 25. Les champs entre crochets sont à compléter.
 
-**Responsable du traitement** : [votre organisation]. GLPI Assist est un plugin installé dans votre GLPI ; son éditeur ne reçoit, ne stocke et ne traite aucune donnée.
+**Responsable du traitement** : [votre organisation]. Relance est un plugin installé dans votre GLPI ; son éditeur ne reçoit, ne stocke et ne traite aucune donnée.
 
 **Finalité** : aider les techniciens du support à traiter les tickets plus vite, en identifiant les informations manquantes dans une demande et en préparant la question à poser au demandeur. Base légale proposée : intérêt légitime (bon fonctionnement du support interne). [À confirmer par votre DPO.]
 
@@ -27,4 +27,4 @@ Ce document est un modèle pré-rempli pour votre registre des traitements (RGPD
 
 **Réversibilité** : désactiver le plugin ou retirer la clé arrête tout traitement. La désinstallation supprime les tables du plugin.
 
-Dernière mise à jour du modèle : octobre 2026, GLPI Assist 0.1.
+Dernière mise à jour du modèle : octobre 2026, Relance 0.1.

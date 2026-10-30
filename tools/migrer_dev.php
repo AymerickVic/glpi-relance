@@ -5,7 +5,7 @@
  * (donc sans perdre la configuration ni la clé API). Puis vérifie la licence et affiche l'état.
  */
 
-use GlpiPlugin\Glpiassist\Licence;
+use GlpiPlugin\Relance\Licence;
 
 chdir(__DIR__ . '/../../..');
 require 'vendor/autoload.php';
@@ -13,17 +13,17 @@ $kernel = new \Glpi\Kernel\Kernel();
 $kernel->boot();
 
 // Le noyau a déjà chargé setup.php (plugin actif) ; hook.php ne l'est qu'à l'install.
-if (!function_exists('plugin_glpiassist_install')) {
-    require 'plugins/glpiassist/hook.php';
+if (!function_exists('plugin_relance_install')) {
+    require 'plugins/relance/hook.php';
 }
 
 $_SESSION['glpi_currenttime'] = date('Y-m-d H:i:s');
-plugin_glpiassist_install();
+plugin_relance_install();
 echo "install (idempotent) : ok\n";
 
 if ($cle = $argv[1] ?? '') {
     global $DB;
-    $DB->update('glpi_plugin_glpiassist_configs', ['licence_key' => strtoupper($cle)], ['entities_id' => 0]);
+    $DB->update('glpi_plugin_relance_configs', ['licence_key' => strtoupper($cle)], ['entities_id' => 0]);
     echo "clé enregistrée\n";
 }
 

@@ -1,10 +1,10 @@
-# Modèle d'EFVP — GLPI Assist (Québec, loi 25)
+# Modèle d'EFVP — Relance (Québec, loi 25)
 
 Évaluation des facteurs relatifs à la vie privée, à réaliser par l'organisme avant d'activer un fournisseur de modèle situé hors Québec (OpenAI, Anthropic). Non requise si vous utilisez Ollama sur votre infrastructure. Ce modèle est un point de départ, pas un avis juridique ; votre responsable de la protection des renseignements personnels le valide.
 
 ## 1. Description du projet
 
-Activation du plugin GLPI Assist dans le GLPI de [organisme]. À la création d'un ticket de support, le plugin envoie le titre et la description du ticket (pseudonymisés et masqués) au fournisseur [OpenAI / Anthropic] pour identifier les informations manquantes et préparer une question au demandeur. Un technicien relit et décide d'envoyer ou non.
+Activation du plugin Relance dans le GLPI de [organisme]. À la création d'un ticket de support, le plugin envoie le titre et la description du ticket (pseudonymisés et masqués) au fournisseur [OpenAI / Anthropic] pour identifier les informations manquantes et préparer une question au demandeur. Un technicien relit et décide d'envoyer ou non.
 
 ## 2. Renseignements personnels concernés
 
@@ -34,4 +34,4 @@ Destinataire : [OpenAI, LLC, États-Unis / Anthropic, PBC, États-Unis]. Nature 
 
 [Le traitement peut être mis en œuvre / doit être modifié / ne peut pas être mis en œuvre] compte tenu des mesures ci-dessus. Décision du RPRP : [nom, date].
 
-Dernière mise à jour du modèle : octobre 2026, GLPI Assist 0.1.
+Dernière mise à jour du modèle : octobre 2026, Relance 0.1.

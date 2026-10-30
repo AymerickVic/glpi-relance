@@ -2,10 +2,10 @@
 
 /**
  * Outil de développement : crée un ticket par le vrai chemin (Ticket::add → hook item_add) puis lance la tâche.
- * Usage (dans le conteneur) : php plugins/glpiassist/tools/creer_ticket.php "Titre" "Description"
+ * Usage (dans le conteneur) : php plugins/relance/tools/creer_ticket.php "Titre" "Description"
  */
 
-use GlpiPlugin\Glpiassist\Queue;
+use GlpiPlugin\Relance\Queue;
 
 // GLPI 11 : plus d'inc/includes.php, on démarre le noyau comme bin/console.
 chdir(__DIR__ . '/../../..');
@@ -38,12 +38,12 @@ $r = Queue::cronProcessqueue($task);
 echo "cronProcessqueue → $r\n";
 
 global $DB;
-foreach ($DB->request(['FROM' => 'glpi_plugin_glpiassist_queue', 'WHERE' => ['tickets_id' => $id]]) as $q) {
+foreach ($DB->request(['FROM' => 'glpi_plugin_relance_queue', 'WHERE' => ['tickets_id' => $id]]) as $q) {
     echo "File : {$q['status']} (tentatives {$q['attempts']}) " . ($q['last_error'] ?? '') . "\n";
 }
 foreach ($DB->request(['FROM' => 'glpi_itilfollowups', 'WHERE' => ['itemtype' => 'Ticket', 'items_id' => $id]]) as $f) {
     echo "Suivi (privé={$f['is_private']}, user {$f['users_id']}) :\n" . strip_tags(str_replace('</p>', "\n", $f['content'])) . "\n";
 }
-foreach ($DB->request(['FROM' => 'glpi_plugin_glpiassist_logs', 'WHERE' => ['tickets_id' => $id]]) as $l) {
+foreach ($DB->request(['FROM' => 'glpi_plugin_relance_logs', 'WHERE' => ['tickets_id' => $id]]) as $l) {
     echo "Journal : {$l['outcome']}, {$l['provider']}, masquages {$l['masked_count']}, {$l['duration_ms']} ms\n";
 }

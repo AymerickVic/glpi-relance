@@ -1,12 +1,12 @@
 <?php
 
 /**
- * GLPI Assist — enregistrement de la configuration.
+ * Relance — enregistrement de la configuration.
  * Licence GPLv3+, voir LICENSE.
  */
 
-use GlpiPlugin\Glpiassist\Config;
-use GlpiPlugin\Glpiassist\Licence;
+use GlpiPlugin\Relance\Config;
+use GlpiPlugin\Relance\Licence;
 
 Session::checkRight('config', UPDATE);
 

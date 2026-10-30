@@ -1,36 +1,40 @@
 <?php
 
 /**
- * GLPI Assist — configuration (par entité, héritage depuis l'entité racine).
+ * Relance — configuration (par entité, héritage depuis l'entité racine).
  * Licence GPLv3+, voir LICENSE.
  */
 
-namespace GlpiPlugin\Glpiassist;
+namespace GlpiPlugin\Relance;
 
 use Auth;
 use CommonDBTM;
 use CommonGLPI;
 use GLPIKey;
 use Html;
+use ITILFollowup;
 use Profile;
 use Profile_User;
+use ProfileRight;
 use Session;
+use Ticket;
 use User;
 
 class Config extends CommonDBTM
 {
     public static $rightname = 'config';
 
-    public const TECH_USER_LOGIN = 'glpiassist';
+    public const TECH_USER_LOGIN = 'relance-robot';
+    public const ROBOT_PROFILE   = 'Relance (robot)';
 
     public static function getTable($classname = null)
     {
-        return 'glpi_plugin_glpiassist_configs';
+        return 'glpi_plugin_relance_configs';
     }
 
     public static function getTypeName($nb = 0)
     {
-        return 'GLPI Assist';
+        return 'Relance';
     }
 
     /**
@@ -92,8 +96,8 @@ class Config extends CommonDBTM
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
-        if (!$withtemplate && ($item->getType() === 'Config' || $item->getType() === 'Entity')) {
-            return 'GLPI Assist';
+        if (!$withtemplate && ($item->getType() === 'Config' || $item->getType() === 'Entity') && Session::haveRight('config', UPDATE)) {
+            return 'Relance';
         }
         return '';
     }
@@ -113,6 +117,8 @@ class Config extends CommonDBTM
      */
     public function showForm($ID, array $options = [])
     {
+        global $CFG_GLPI;
+
         if (!Session::haveRight('config', UPDATE)) {
             return false;
         }
@@ -146,7 +152,7 @@ class Config extends CommonDBTM
         echo "<input type='hidden' name='id' value='" . (int) ($row['id'] ?? 0) . "'>";
         echo "<input type='hidden' name='entities_id' value='$entities_id'>";
         echo "<div class='card'><div class='card-body'>";
-        echo "<h3>GLPI Assist — relance des tickets incomplets</h3>";
+        echo "<h3>Relance — relance des tickets incomplets</h3>";
         echo "<p class='text-muted'>Le plugin tourne dans ce GLPI. La seule connexion sortante va vers le fournisseur choisi, avec votre clé. Rien ne transite ailleurs.</p>";
 
         echo "<div class='mb-3'><label class='form-label'>Activer</label>";
@@ -158,10 +164,10 @@ class Config extends CommonDBTM
         echo '</div>';
 
         echo "<div class='mb-3'><label class='form-label'>Modèle</label>";
-        echo "<input class='form-control' type='text' name='model' value='" . Html::entities_deep($row['model'] ?? '') . "' placeholder='gpt-4o-mini, claude-haiku-4-5, qwen2.5:14b…'></div>";
+        echo "<input class='form-control' type='text' name='model' value='" . htmlescape($row['model'] ?? '') . "' placeholder='gpt-4o-mini, claude-haiku-4-5, qwen2.5:14b…'></div>";
 
         echo "<div class='mb-3'><label class='form-label'>Adresse (Ollama seulement)</label>";
-        echo "<input class='form-control' type='text' name='endpoint' value='" . Html::entities_deep($row['endpoint'] ?? '') . "' placeholder='http://ollama.local:11434'></div>";
+        echo "<input class='form-control' type='text' name='endpoint' value='" . htmlescape($row['endpoint'] ?? '') . "' placeholder='http://ollama.local:11434'></div>";
 
         echo "<div class='mb-3'><label class='form-label'>Clé API — $keyHint</label>";
         echo "<input class='form-control' type='password' name='api_key' value='' autocomplete='new-password' placeholder='laisser vide pour ne pas changer'>";
@@ -177,7 +183,7 @@ class Config extends CommonDBTM
 
         if ($entities_id === 0) {
             echo "<div class='mb-3'><label class='form-label'>Clé de licence</label>";
-            echo "<input class='form-control' type='text' name='licence_key' value='" . Html::entities_deep($row['licence_key'] ?? '') . "' placeholder='GA-XXXX-XXXX-XXXX'>";
+            echo "<input class='form-control' type='text' name='licence_key' value='" . htmlescape($row['licence_key'] ?? '') . "' placeholder='GA-XXXX-XXXX-XXXX'>";
             echo "<div class='form-text'>Vérifiée une fois par jour. Le serveur reçoit la clé et les numéros de version, jamais de contenu de ticket.</div></div>";
         }
 
@@ -189,7 +195,7 @@ class Config extends CommonDBTM
             echo "<button type='submit' name='heriter' class='btn btn-outline-danger'>Revenir à la configuration parente</button> ";
         }
         if ($entities_id === 0) {
-            echo "<a class='btn btn-outline-secondary' href='" . \Plugin::getWebDir('glpiassist') . "/front/diagnostic.php'>Diagnostic</a>";
+            echo "<a class='btn btn-outline-secondary' href='" . $CFG_GLPI['root_doc'] . '/plugins/relance' . "/front/diagnostic.php'>Diagnostic</a>";
         }
         echo '</div></div>';
         Html::closeForm();
@@ -197,10 +203,36 @@ class Config extends CommonDBTM
     }
 
     /**
-     * Utilisateur technique auteur des suivis. Profil Technicien, entité racine, récursif.
+     * Profil du robot : lire les tickets, ajouter et lire des suivis. Rien d'autre.
+     */
+    public static function ensureRobotProfile(): int
+    {
+        $profile = new Profile();
+        foreach ($profile->find(['name' => self::ROBOT_PROFILE]) as $p) {
+            return (int) $p['id'];
+        }
+        $id = (int) $profile->add([
+            'name'      => self::ROBOT_PROFILE,
+            'interface' => 'central',
+            'comment'   => 'Créé par le plugin Relance. Lecture des tickets et ajout de suivis seulement.',
+        ]);
+        if ($id > 0) {
+            ProfileRight::updateProfileRights($id, [
+                'ticket'   => READ | Ticket::READALL,
+                'followup' => READ | ITILFollowup::SEEPUBLIC | ITILFollowup::SEEPRIVATE | ITILFollowup::ADDALLITEM,
+            ]);
+        }
+        return $id;
+    }
+
+    /**
+     * Utilisateur technique auteur des suivis : profil robot, entité racine, récursif,
+     * et aucun moyen de se connecter (pas de source d'authentification, pas de mot de passe).
      */
     public static function ensureTechnicalUser(): int
     {
+        $profiles_id = self::ensureRobotProfile();
+
         $user = new User();
         if ($user->getFromDBbyName(self::TECH_USER_LOGIN)) {
             if (!$user->fields['is_active']) {
@@ -209,21 +241,11 @@ class Config extends CommonDBTM
             return $user->getID();
         }
 
-        $profile = new Profile();
-        $profiles_id = 0;
-        foreach ($profile->find(['interface' => 'central'], ['id'], 1) as $p) {
-            $profiles_id = (int) $p['id'];
-        }
-        foreach ($profile->find(['name' => 'Technician']) as $p) {
-            $profiles_id = (int) $p['id'];
-        }
-
         $id = (int) $user->add([
             'name'          => self::TECH_USER_LOGIN,
-            'realname'      => 'GLPI Assist',
+            'realname'      => 'Relance (robot)',
             'is_active'     => 1,
-            'authtype'      => Auth::DB_GLPI,
-            'password'      => bin2hex(random_bytes(24)),
+            'authtype'      => Auth::NOT_YET_AUTHENTIFIED,
             '_profiles_id'  => $profiles_id,
             '_entities_id'  => 0,
             '_is_recursive' => 1,

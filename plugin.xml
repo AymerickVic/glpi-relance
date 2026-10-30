@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <name>Relance</name>
+  <key>relance</key>
+  <state>stable</state>
+  <logo></logo>
+  <description>
+    <short>
+      <fr>Relance automatique des tickets incomplets : la question au demandeur, prête avant que le technicien ouvre le ticket.</fr>
+      <en>Automatic follow-up for incomplete tickets: the question to the requester, drafted before the technician opens the ticket.</en>
+    </short>
+    <long>
+      <fr>À la création d'un ticket, le plugin demande au modèle de votre choix (OpenAI, Anthropic ou un Ollama chez vous, avec votre clé) ce qui manque : poste, message d'erreur, depuis quand, périmètre. S'il manque quelque chose, il dépose un suivi privé de trois lignes avec la question prête ; le technicien clique pour l'envoyer. Si rien ne manque, rien n'est posté. Rien ne transite par un serveur tiers.</fr>
+      <en>When a ticket is created, the plugin asks the model of your choice (OpenAI, Anthropic, or a local Ollama, with your own key) what is missing: asset, error message, since when, scope. If something is missing, it adds a three-line private follow-up with the question ready to send; the technician clicks to send it. If nothing is missing, nothing is posted. Nothing goes through a third-party server.</en>
+    </long>
+  </description>
+  <homepage>https://github.com/AymerickVic/glpi-relance</homepage>
+  <download>https://github.com/AymerickVic/glpi-relance/releases</download>
+  <issues>https://github.com/AymerickVic/glpi-relance/issues</issues>
+  <readme>https://github.com/AymerickVic/glpi-relance/blob/main/README.md</readme>
+  <authors>
+    <author>Aymerick Victoire</author>
+  </authors>
+  <versions>
+    <version>
+      <num>0.1.0</num>
+      <compatibility>~11.0</compatibility>
+      <download_url>https://github.com/AymerickVic/glpi-relance/releases/download/v0.1.0/relance-0.1.0.zip</download_url>
+    </version>
+  </versions>
+  <langs>
+    <lang>fr_FR</lang>
+    <lang>en_GB</lang>
+  </langs>
+  <license>GPLv3+</license>
+  <tags>
+    <fr>
+      <tag>Assistance</tag>
+      <tag>Tickets</tag>
+      <tag>Automatisation</tag>
+    </fr>
+    <en>
+      <tag>Helpdesk</tag>
+      <tag>Tickets</tag>
+      <tag>Automation</tag>
+    </en>
+  </tags>
+</root>

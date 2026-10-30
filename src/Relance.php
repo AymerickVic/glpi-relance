@@ -1,12 +1,13 @@
 <?php
 
 /**
- * GLPI Assist — la relance : qu'est-ce qui manque dans ce ticket, et quelle question poser.
+ * Relance — la relance : qu'est-ce qui manque dans ce ticket, et quelle question poser.
  * Licence GPLv3+, voir LICENSE.
  */
 
-namespace GlpiPlugin\Glpiassist;
+namespace GlpiPlugin\Relance;
 
+use ITILFollowup;
 use Ticket;
 use User;
 
@@ -87,24 +88,37 @@ class Relance
     public static function proposee(int $tickets_id): ?array
     {
         global $DB;
-        foreach ($DB->request(['FROM' => 'glpi_plugin_glpiassist_relances', 'WHERE' => ['tickets_id' => $tickets_id, 'status' => 'proposed'], 'ORDER' => 'id DESC', 'LIMIT' => 1]) as $row) {
+        foreach ($DB->request(['FROM' => 'glpi_plugin_relance_relances', 'WHERE' => ['tickets_id' => $tickets_id, 'status' => 'proposed'], 'ORDER' => 'id DESC', 'LIMIT' => 1]) as $row) {
             return $row;
         }
         return null;
     }
 
-    /** Hook timeline_actions : les deux boutons, seulement s'il y a une relance proposée et que l'utilisateur peut répondre. */
+    /**
+     * Qui peut envoyer ou ignorer une relance : un technicien (interface centrale) qui a le droit
+     * d'ajouter un suivi sur tout ticket et de modifier celui-ci. Jamais le demandeur sur son propre ticket.
+     */
+    public static function peutEnvoyer(Ticket $ticket): bool
+    {
+        return \Session::getCurrentInterface() === 'central'
+            && \Session::haveRight(ITILFollowup::$rightname, ITILFollowup::ADDALLITEM)
+            && $ticket->canUpdateItem();
+    }
+
+    /** Hook timeline_actions : les deux boutons, seulement s'il y a une relance proposée et que l'utilisateur peut l'envoyer. */
     public static function timelineActions(array $params): void
     {
+        global $CFG_GLPI;
+
         $item = $params['item'] ?? null;
-        if (!$item instanceof Ticket || !$item->canAddFollowups()) {
+        if (!$item instanceof Ticket || !self::peutEnvoyer($item)) {
             return;
         }
         $relance = self::proposee($item->getID());
         if (!$relance) {
             return;
         }
-        $url = \Plugin::getWebDir('glpiassist') . '/front/envoyer.form.php';
+        $url = $CFG_GLPI['root_doc'] . '/plugins/relance/front/envoyer.form.php';
         echo "<form method='post' action='$url' class='d-inline-block ms-2'>";
         echo "<input type='hidden' name='id' value='" . (int) $relance['id'] . "'>";
         echo "<input type='hidden' name='tickets_id' value='" . $item->getID() . "'>";

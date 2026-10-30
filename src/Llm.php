@@ -1,12 +1,14 @@
 <?php
 
 /**
- * GLPI Assist — appel au modèle (OpenAI, Anthropic, Ollama, ou à blanc).
- * Une seule méthode, une seule forme de réponse : du texte, qu'on attend en JSON.
+ * Relance — appel au modèle (OpenAI, Anthropic, Ollama, ou à blanc).
+ * Passe par Toolbox::callCurl pour respecter le proxy configuré dans GLPI.
  * Licence GPLv3+, voir LICENSE.
  */
 
-namespace GlpiPlugin\Glpiassist;
+namespace GlpiPlugin\Relance;
+
+use Toolbox;
 
 class Llm
 {
@@ -65,28 +67,17 @@ class Llm
                 throw new \RuntimeException("Fournisseur inconnu : $provider");
         }
 
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 60,
-        ]);
-        $raw = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $err = curl_error($ch);
-        curl_close($ch);
+        [$raw, $code, $err] = self::post($url, $headers, $body, 20);
         $ms = (int) ((microtime(true) - $t0) * 1000);
 
-        if ($raw === false) {
-            throw new \RuntimeException("Connexion impossible ($provider) : $err");
+        if ($raw === '' && $err !== '') {
+            throw new \RuntimeException("Connexion impossible ($provider) : " . self::sansSecret($err));
         }
         $data = json_decode($raw, true);
         if ($code < 200 || $code >= 300 || !is_array($data)) {
             $msg = is_array($data) ? ($data['error']['message'] ?? $data['error'] ?? '') : '';
-            throw new \RuntimeException("Réponse $code de $provider" . ($msg ? " : " . (is_string($msg) ? $msg : json_encode($msg)) : ''));
+            $msg = is_string($msg) ? $msg : json_encode($msg);
+            throw new \RuntimeException("Réponse $code de $provider" . ($msg ? ' : ' . self::sansSecret($msg) : ''));
         }
 
         switch ($provider) {
@@ -104,6 +95,32 @@ class Llm
         }
 
         return ['text' => (string) $text, 'tokens' => $tokens, 'http_code' => $code, 'duration_ms' => $ms];
+    }
+
+    /**
+     * POST JSON via Toolbox::callCurl (proxy GLPI respecté).
+     * @return array{0: string, 1: int, 2: string} corps, code HTTP, message d'erreur
+     */
+    public static function post(string $url, array $headers, array $body, int $timeout): array
+    {
+        $msgerr = null;
+        $curlerr = null;
+        $info = null;
+        $raw = Toolbox::callCurl($url, [
+            CURLOPT_POST           => true,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_POSTFIELDS     => json_encode($body, JSON_UNESCAPED_UNICODE),
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_TIMEOUT        => $timeout,
+        ], $msgerr, $curlerr, false, $info);
+        $code = (int) ($info['http_code'] ?? 0);
+        return [(string) $raw, $code, (string) ($msgerr ?? $curlerr ?? '')];
+    }
+
+    /** Un message d'erreur de fournisseur peut citer la clé : on l'efface avant de journaliser. */
+    public static function sansSecret(string $s): string
+    {
+        return mb_substr(preg_replace('/\b(sk|key|gsk|xai|AIza)[-_][A-Za-z0-9_\-.*]{6,}/', '[CLÉ]', $s), 0, 300);
     }
 
     /**

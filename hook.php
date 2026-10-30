@@ -1,27 +1,27 @@
 <?php
 
 /**
- * GLPI Assist — installation et désinstallation.
+ * Relance — installation et désinstallation.
  * Licence GPLv3+, voir LICENSE.
  */
 
-use GlpiPlugin\Glpiassist\Config;
-use GlpiPlugin\Glpiassist\Licence;
-use GlpiPlugin\Glpiassist\Queue;
+use GlpiPlugin\Relance\Config;
+use GlpiPlugin\Relance\Licence;
+use GlpiPlugin\Relance\Queue;
 
-function plugin_glpiassist_install(): bool
+function plugin_relance_install(): bool
 {
     global $DB;
 
-    $migration = new Migration(PLUGIN_GLPIASSIST_VERSION);
+    $migration = new Migration(PLUGIN_RELANCE_VERSION);
 
     $charset   = DBConnection::getDefaultCharset();
     $collation = DBConnection::getDefaultCollation();
     $keysign   = DBConnection::getDefaultPrimaryKeySignOption();
 
     // Configuration par entité (héritage : la ligne de l'entité 0 vaut pour tout le monde tant qu'une entité n'a pas la sienne).
-    if (!$DB->tableExists('glpi_plugin_glpiassist_configs')) {
-        $DB->doQuery("CREATE TABLE `glpi_plugin_glpiassist_configs` (
+    if (!$DB->tableExists('glpi_plugin_relance_configs')) {
+        $DB->doQuery("CREATE TABLE `glpi_plugin_relance_configs` (
             `id` int {$keysign} NOT NULL AUTO_INCREMENT,
             `entities_id` int {$keysign} NOT NULL DEFAULT 0,
             `is_active` tinyint NOT NULL DEFAULT 0,
@@ -29,18 +29,19 @@ function plugin_glpiassist_install(): bool
             `model` varchar(128) NOT NULL DEFAULT '',
             `endpoint` varchar(255) NOT NULL DEFAULT '',
             `api_key` text DEFAULT NULL,
+            `licence_key` varchar(255) NOT NULL DEFAULT '',
             `language` varchar(8) NOT NULL DEFAULT 'fr',
             `excluded_categories` text DEFAULT NULL,
             `date_mod` timestamp NULL DEFAULT NULL,
             PRIMARY KEY (`id`),
             UNIQUE KEY `entities_id` (`entities_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} ROW_FORMAT=DYNAMIC;");
-        $DB->doQuery("INSERT INTO `glpi_plugin_glpiassist_configs` (`entities_id`, `is_active`, `provider`) VALUES (0, 0, 'dry')");
+        $DB->doQuery("INSERT INTO `glpi_plugin_relance_configs` (`entities_id`, `is_active`, `provider`) VALUES (0, 0, 'dry')");
     }
 
     // File d'attente : le hook de création y dépose le ticket, la tâche planifiée la vide.
-    if (!$DB->tableExists('glpi_plugin_glpiassist_queue')) {
-        $DB->doQuery("CREATE TABLE `glpi_plugin_glpiassist_queue` (
+    if (!$DB->tableExists('glpi_plugin_relance_queue')) {
+        $DB->doQuery("CREATE TABLE `glpi_plugin_relance_queue` (
             `id` int {$keysign} NOT NULL AUTO_INCREMENT,
             `tickets_id` int {$keysign} NOT NULL,
             `entities_id` int {$keysign} NOT NULL DEFAULT 0,
@@ -56,8 +57,8 @@ function plugin_glpiassist_install(): bool
     }
 
     // Relances proposées : la question, en attente du clic du technicien.
-    if (!$DB->tableExists('glpi_plugin_glpiassist_relances')) {
-        $DB->doQuery("CREATE TABLE `glpi_plugin_glpiassist_relances` (
+    if (!$DB->tableExists('glpi_plugin_relance_relances')) {
+        $DB->doQuery("CREATE TABLE `glpi_plugin_relance_relances` (
             `id` int {$keysign} NOT NULL AUTO_INCREMENT,
             `tickets_id` int {$keysign} NOT NULL,
             `manque` varchar(255) NOT NULL DEFAULT '',
@@ -74,8 +75,8 @@ function plugin_glpiassist_install(): bool
     }
 
     // Journal : métadonnées seulement, jamais le texte envoyé ni la réponse.
-    if (!$DB->tableExists('glpi_plugin_glpiassist_logs')) {
-        $DB->doQuery("CREATE TABLE `glpi_plugin_glpiassist_logs` (
+    if (!$DB->tableExists('glpi_plugin_relance_logs')) {
+        $DB->doQuery("CREATE TABLE `glpi_plugin_relance_logs` (
             `id` int {$keysign} NOT NULL AUTO_INCREMENT,
             `tickets_id` int {$keysign} NOT NULL,
             `fonction` varchar(32) NOT NULL,
@@ -94,31 +95,28 @@ function plugin_glpiassist_install(): bool
     }
 
     // 0.1.0 → : clé de licence (entité racine seulement)
-    if (!$DB->fieldExists('glpi_plugin_glpiassist_configs', 'licence_key')) {
-        $migration->addField('glpi_plugin_glpiassist_configs', 'licence_key', 'string', ['value' => '']);
-        $migration->migrationOneTable('glpi_plugin_glpiassist_configs');
+    if (!$DB->fieldExists('glpi_plugin_relance_configs', 'licence_key')) {
+        $migration->addField('glpi_plugin_relance_configs', 'licence_key', 'string', ['value' => '']);
+        $migration->migrationOneTable('glpi_plugin_relance_configs');
     }
 
     Config::ensureTechnicalUser();
 
     CronTask::register(Licence::class, 'verifierlicence', DAY_TIMESTAMP, [
-        'mode'    => CronTask::MODE_INTERNAL,
         'state'   => CronTask::STATE_WAITING,
-        'comment' => 'GLPI Assist : vérifie la licence et signale les mises à jour (envoie la clé et les versions, jamais de contenu)',
+        'comment' => 'Relance : vérifie la licence et signale les mises à jour (envoie la clé et les versions, jamais de contenu)',
     ]);
 
     CronTask::register(Queue::class, 'processqueue', MINUTE_TIMESTAMP, [
-        'mode'    => CronTask::MODE_INTERNAL,
         'state'   => CronTask::STATE_WAITING,
         'param'   => 20,
-        'comment' => 'GLPI Assist : traite les tickets en attente (relance pour informations manquantes)',
+        'comment' => 'Relance : traite les tickets en attente (relance pour informations manquantes)',
     ]);
 
     CronTask::register(Queue::class, 'purgelogs', DAY_TIMESTAMP, [
-        'mode'    => CronTask::MODE_INTERNAL,
         'state'   => CronTask::STATE_WAITING,
         'param'   => 90,
-        'comment' => 'GLPI Assist : purge le journal au-delà de N jours',
+        'comment' => 'Relance : purge le journal au-delà de N jours',
     ]);
 
     $migration->executeMigration();
@@ -126,11 +124,11 @@ function plugin_glpiassist_install(): bool
     return true;
 }
 
-function plugin_glpiassist_uninstall(): bool
+function plugin_relance_uninstall(): bool
 {
     global $DB;
 
-    foreach (['glpi_plugin_glpiassist_configs', 'glpi_plugin_glpiassist_queue', 'glpi_plugin_glpiassist_relances', 'glpi_plugin_glpiassist_logs'] as $table) {
+    foreach (['glpi_plugin_relance_configs', 'glpi_plugin_relance_queue', 'glpi_plugin_relance_relances', 'glpi_plugin_relance_logs'] as $table) {
         if ($DB->tableExists($table)) {
             $DB->doQuery("DROP TABLE `$table`");
         }
