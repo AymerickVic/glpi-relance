@@ -80,6 +80,9 @@ class Config extends CommonDBTM
                 $input['api_key'] = (new GLPIKey())->encrypt($input['api_key']);
             }
         }
+        if (isset($input['licence_key'])) {
+            $input['licence_key'] = strtoupper(trim((string) $input['licence_key']));
+        }
         if (isset($input['excluded_categories']) && is_array($input['excluded_categories'])) {
             $input['excluded_categories'] = implode(',', array_map('intval', $input['excluded_categories']));
         }
@@ -135,6 +138,10 @@ class Config extends CommonDBTM
             'ollama'    => 'Ollama (local)',
         ];
 
+        if ($entities_id === 0) {
+            echo Licence::bandeau();
+        }
+
         echo "<form method='post' action='" . self::getFormURL() . "'>";
         echo "<input type='hidden' name='id' value='" . (int) ($row['id'] ?? 0) . "'>";
         echo "<input type='hidden' name='entities_id' value='$entities_id'>";
@@ -168,7 +175,16 @@ class Config extends CommonDBTM
         \ITILCategory::dropdown(['name' => 'excluded_categories[]', 'multiple' => true, 'values' => array_filter(array_map('intval', explode(',', (string) ($row['excluded_categories'] ?? ''))))]);
         echo "<div class='form-text'>RH, paie, médical, accès : les tickets de ces catégories ne sont jamais envoyés au modèle.</div></div>";
 
+        if ($entities_id === 0) {
+            echo "<div class='mb-3'><label class='form-label'>Clé de licence</label>";
+            echo "<input class='form-control' type='text' name='licence_key' value='" . Html::entities_deep($row['licence_key'] ?? '') . "' placeholder='GA-XXXX-XXXX-XXXX'>";
+            echo "<div class='form-text'>Vérifiée une fois par jour. Le serveur reçoit la clé et les numéros de version, jamais de contenu de ticket.</div></div>";
+        }
+
         echo "<button type='submit' name='update' class='btn btn-primary'>Enregistrer</button> ";
+        if ($entities_id === 0) {
+            echo "<button type='submit' name='verifier_licence' class='btn btn-outline-secondary'>Vérifier la licence maintenant</button> ";
+        }
         if ($entities_id > 0 && !$herite) {
             echo "<button type='submit' name='heriter' class='btn btn-outline-danger'>Revenir à la configuration parente</button> ";
         }

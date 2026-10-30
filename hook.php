@@ -6,6 +6,7 @@
  */
 
 use GlpiPlugin\Glpiassist\Config;
+use GlpiPlugin\Glpiassist\Licence;
 use GlpiPlugin\Glpiassist\Queue;
 
 function plugin_glpiassist_install(): bool
@@ -92,7 +93,19 @@ function plugin_glpiassist_install(): bool
         ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} ROW_FORMAT=DYNAMIC;");
     }
 
+    // 0.1.0 → : clé de licence (entité racine seulement)
+    if (!$DB->fieldExists('glpi_plugin_glpiassist_configs', 'licence_key')) {
+        $migration->addField('glpi_plugin_glpiassist_configs', 'licence_key', 'string', ['value' => '']);
+        $migration->migrationOneTable('glpi_plugin_glpiassist_configs');
+    }
+
     Config::ensureTechnicalUser();
+
+    CronTask::register(Licence::class, 'verifierlicence', DAY_TIMESTAMP, [
+        'mode'    => CronTask::MODE_INTERNAL,
+        'state'   => CronTask::STATE_WAITING,
+        'comment' => 'GLPI Assist : vérifie la licence et signale les mises à jour (envoie la clé et les versions, jamais de contenu)',
+    ]);
 
     CronTask::register(Queue::class, 'processqueue', MINUTE_TIMESTAMP, [
         'mode'    => CronTask::MODE_INTERNAL,
@@ -122,6 +135,8 @@ function plugin_glpiassist_uninstall(): bool
             $DB->doQuery("DROP TABLE `$table`");
         }
     }
+
+    \Config::deleteConfigurationValues(Licence::CONTEXTE, ['licence_statut', 'licence_expire', 'licence_message', 'derniere_version', 'licence_verifie_le']);
 
     // Les suivis déjà écrits restent dans les tickets : ils appartiennent au client.
     // L'utilisateur technique reste aussi (il est auteur de ces suivis) ; on le désactive.

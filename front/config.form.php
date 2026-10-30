@@ -6,13 +6,21 @@
  */
 
 use GlpiPlugin\Glpiassist\Config;
+use GlpiPlugin\Glpiassist\Licence;
 
 Session::checkRight('config', UPDATE);
 
 $config = new Config();
 $entities_id = (int) ($_POST['entities_id'] ?? 0);
 
-if (isset($_POST['update'])) {
+if (isset($_POST['verifier_licence'])) {
+    // On enregistre d'abord la clé saisie, puis on vérifie.
+    if ($existante = Config::rowFor(0)) {
+        $config->update(['id' => $existante['id'], 'licence_key' => trim((string) ($_POST['licence_key'] ?? ''))]);
+    }
+    $e = Licence::verifier();
+    Session::addMessageAfterRedirect($e['message'], true, $e['statut'] === 'valide' ? INFO : WARNING);
+} elseif (isset($_POST['update'])) {
     if (!isset($_POST['excluded_categories'])) {
         $_POST['excluded_categories'] = [];
     }
